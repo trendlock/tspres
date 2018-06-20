@@ -36,7 +36,7 @@ class:inverse
 
 
 
-&lt;!-- ![](imgs/factory.gif) --&gt;
+![](imgs/factory.gif)
 
 ---
 
@@ -148,6 +148,20 @@ So now we can do our more familar operations and manipulate the date stamp more 
 
 ```r
 library(lubridate)
+```
+
+```
+## 
+## Attaching package: 'lubridate'
+```
+
+```
+## The following object is masked from 'package:base':
+## 
+##     date
+```
+
+```r
 gas %&gt;% 
   mutate(year = year(index),
          month = month(index),

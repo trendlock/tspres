@@ -84,7 +84,7 @@ ow <- "#f8f8f8"
 
 
 
-<!-- ![](imgs/factory.gif) -->
+![](imgs/factory.gif)
 
 ---
 
