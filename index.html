@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Working with Time Series</title>
+    <meta charset="utf-8">
+    <meta name="author" content="Ross Ireland" />
+    <link href="libs/remark-css/default.css" rel="stylesheet" />
+    <link href="libs/remark-css/default-fonts.css" rel="stylesheet" />
+  </head>
+  <body>
+    <textarea id="source">
+class: center, middle, inverse, title-slide
+
+# Working with Time Series
+## <code>dplyr</code> - <code>lubridate</code> - <code>timetk</code> - <code>padr</code>
+### Ross Ireland
+### 2018/06/19
+
+---
+
+
+class:inverse
+
+
+
+
+
+
+# Contents
+
+- What is a time series (and ts objects)
+- Working with dates and times
+- Using Rolling/Moving Averages
+- binning (hourly, daily, weekly, monthly, qrtrly, annually, etc) ie annualise 
+- Using seasonal adjustment / trend (like in ABS series)
+
+
+
+&lt;!-- ![](imgs/factory.gif) --&gt;
+
+---
+
+class: inverse
+
+# What is a time series
+
+Simply looking at a observations *evenly spaced*, with an associated date, time or date-time stamp.
+
+An example: *Australian monthly gas production: 1956–1995*
+
+```r
+head(gas, 50)
+```
+
+```
+##       Jan  Feb  Mar  Apr  May  Jun  Jul  Aug  Sep  Oct  Nov  Dec
+## 1956 1709 1646 1794 1878 2173 2321 2468 2416 2184 2121 1962 1825
+## 1957 1751 1688 1920 1941 2311 2279 2638 2448 2279 2163 1941 1878
+## 1958 1773 1688 1783 1984 2290 2511 2712 2522 2342 2195 1931 1910
+## 1959 1730 1688 1899 1994 2342 2553 2712 2627 2363 2311 2026 1910
+## 1960 1762 1815
+```
+
+
+
+
+---
+
+class: inverse
+
+# What is a time series
+
+
+
+```r
+plot(gas)
+```
+
+![](index_files/figure-html/unnamed-chunk-2-1.png)&lt;!-- --&gt;
+
+---
+
+class: inverse
+
+# TS objects
+
+This type of data has been traditionally stored as `ts` objects. But they are a pain to work with...
+
+
+```r
+class(gas)
+```
+
+```
+## [1] "ts"
+```
+
+```r
+try(colnames(gas))
+```
+
+```
+## NULL
+```
+
+```r
+try(ggplot(gas))
+```
+
+![](index_files/figure-html/unnamed-chunk-3-1.png)&lt;!-- --&gt;
+
+
+
+---
+class: inverse
+
+# TS objects
+
+So thank full someone has made some tools to easily conver to data frames (well, `tibbles`, becuase they are nicer to use)
+
+
+```r
+library(timetk)
+gas &lt;- tk_tbl(gas)
+head(gas, 4)
+```
+
+```
+## # A tibble: 4 x 2
+##   index         value
+##   &lt;S3: yearmon&gt; &lt;dbl&gt;
+## 1 Jan 1956       1709
+## 2 Feb 1956       1646
+## 3 Mar 1956       1794
+## 4 Apr 1956       1878
+```
+
+.footnote[
+The `ts` class object is required for some functions (such as `Arima()` and `bats()` for forecasting). A call like `tk_ts()` can convert back to a `ts` object.
+]
+
+---
+class: inverse
+
+# TS objects
+
+So now we can do our more familar operations and manipulate the date stamp more easily
+
+```r
+library(lubridate)
+gas %&gt;% 
+  mutate(year = year(index),
+         month = month(index),
+         month.abr = month(index, label = T),
+         date = date(index),
+         value.sq = sqrt(value)) %&gt;% 
+  head()
+```
+
+```
+## # A tibble: 6 x 7
+##   index         value  year month month.abr date       value.sq
+##   &lt;S3: yearmon&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;ord&gt;     &lt;date&gt;        &lt;dbl&gt;
+## 1 Jan 1956       1709  1956     1 Jan       1956-01-01     41.3
+## 2 Feb 1956       1646  1956     2 Feb       1956-02-01     40.6
+## 3 Mar 1956       1794  1956     3 Mar       1956-03-01     42.4
+## 4 Apr 1956       1878  1956     4 Apr       1956-04-01     43.3
+## 5 May 1956       2173  1956     5 May       1956-05-01     46.6
+## 6 Jun 1956       2321  1956     6 Jun       1956-06-01     48.2
+```
+
+---
+class: inverse
+
+# TS objects
+
+```r
+ggplot(gas, aes(index, value)) +
+  geom_line(col = ow) + 
+  geom_point(col = ow)
+```
+
+```
+## Don't know how to automatically pick scale for object of type yearmon. Defaulting to continuous.
+```
+
+![](index_files/figure-html/unnamed-chunk-6-1.png)&lt;!-- --&gt;
+
+.footnote[
+Note: Even here this `index` datestamp value is not prefered
+]
+
+---
+
+class: inverse
+
+# TS objects
+
+Say we want to build time series (ts) but have missing data.
+
+
+```r
+gas &lt;- gas %&gt;% 
+  mutate(index = date(index))
+
+df &lt;- gas[c(1:300, 320:400),]
+
+ggplot(df, aes(index, value)) +
+  geom_line(col = ow) + 
+  geom_point(col = ow)
+```
+
+![](index_files/figure-html/unnamed-chunk-7-1.png)&lt;!-- --&gt;
+
+---
+
+class: inverse
+
+# TS objects
+
+We can use the `padr` package to convert to a proper ts structure.
+
+
+```r
+library(padr)
+
+df_fill &lt;- df %&gt;% 
+  pad() %&gt;% 
+  fill_by_value(value, value = 0) # first arg being the variable we want to fill
+```
+
+```
+## pad applied on the interval: month
+```
+
+```r
+ggplot(df_fill,  aes(index, value)) +
+  geom_line(col = ow) + 
+  geom_point(col = ow)
+```
+
+![](index_files/figure-html/unnamed-chunk-8-1.png)&lt;!-- --&gt;
+
+
+---
+
+class: inverse
+
+# TS objects
+Is not a time series
+![](index_files/figure-html/unnamed-chunk-9-1.png)&lt;!-- --&gt;
+Is a time series
+![](index_files/figure-html/unnamed-chunk-10-1.png)&lt;!-- --&gt;
+Is an interpolated time series
+![](index_files/figure-html/unnamed-chunk-11-1.png)&lt;!-- --&gt;
+
+
+---
+
+
+class: inverse
+
+# Moving Averages
+
+
+```r
+library(TTR) # some guys tools package with the fastest simple moving average
+
+gas_g &lt;- gas %&gt;% 
+  mutate(sma.10 = SMA(value),
+         sma.100 = SMA(value, n = 100),
+         ema.10 = EMA(value)) %&gt;% 
+  gather(key, val, -index)
+```
+
+
+- SMA: simply moving average (arithmetic mean)
+  - with two window sizes
+  
+- EMA: exponentially-weighted mean, giving more weight to recent observations
+
+---
+
+class: inverse
+
+# Moving Averages
+
+
+```r
+ggplot(gas_g, aes(index, val, col = key)) +
+  geom_line(size = 1)
+```
+
+![](index_files/figure-html/unnamed-chunk-13-1.png)&lt;!-- --&gt;
+
+
+---
+
+class: inverse
+
+# Binning
+
+Rather than just smoothing a ts we might want to bin it to a particular interval. Our gas data is monthly but perhaps we want quarterly or annually?
+
+The `lubridate` package has some great functions to help minipulate datetime stamps such as:
+
+
+```r
+quarter(x, with_year = T)
+
+floor_date(x, unit = c(
+  "minute", 
+  "month", 
+  "week", 
+  "hour",
+  "year",
+  "halfyear",
+  "season",
+  "bimonth"
+))
+```
+
+
+---
+class: inverse
+
+# Binning
+
+To get a quarterly time series:
+
+
+```r
+gas_qrtr &lt;- gas %&gt;% 
+  mutate(index = quarter(index, with_year = T)) %&gt;% 
+  group_by(index) %&gt;% 
+  summarise(value = mean(value))
+
+gas_qrtr %&gt;% 
+  pull(index) %&gt;% 
+  head()
+```
+
+```
+## [1] 1956.1 1956.2 1956.3 1956.4 1957.1 1957.2
+```
+
+---
+class: inverse
+
+# Binning
+
+
+```r
+ggplot(gas_qrtr, aes(index, value)) +
+  geom_line(col = ow) +
+  geom_point(col = ow)
+```
+
+![](index_files/figure-html/unnamed-chunk-16-1.png)&lt;!-- --&gt;
+
+
+---
+class: inverse
+
+# Binning
+
+To get an annual time series:
+
+
+```r
+gas_annual &lt;- gas %&gt;% 
+  mutate(index = floor_date(index, unit = "year")) %&gt;% 
+  group_by(index) %&gt;% 
+  summarise(value = mean(value))
+
+gas_annual %&gt;% 
+  pull(index) %&gt;% 
+  head()
+```
+
+```
+## [1] "1956-01-01" "1957-01-01" "1958-01-01" "1959-01-01" "1960-01-01"
+## [6] "1961-01-01"
+```
+
+.footnote[
+Note: the `floor_date()` method, retains the index's datetime format, where as the `quarter()` (or `year()`) function would drop to just a date format.
+]
+
+---
+class: inverse
+
+# Binning
+
+
+```r
+ggplot(gas_annual, aes(index, value)) +
+  geom_line(col = ow) +
+  geom_point(col = ow) +
+  scale_x_date(name = NULL, 
+               breaks = pull(gas_annual, index),
+               labels = scales::date_format("%Y")) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+![](index_files/figure-html/unnamed-chunk-18-1.png)&lt;!-- --&gt;
+
+---
+class: inverse
+
+# Seasonal Adjustment
+
+This is actaully a complex and imprecise science (a bit like forecasting) as has many mehtods.
+
+The ABS explains on its website that it uses methods devised by the US Census Bureau, some of which are ported to R. They are complex, archaic and tricky to use. But it we want to replicate exactly the series that that ABS produces I'm happy to follow it up.
+
+In the mean time here is a method that gets close. It's here in a raw crude form but it could be function-ified.
+
+.footnote[
+Notes:
+[ABS Seasonaly Adj methods](http://www.abs.gov.au/websitedbs/d3310114.nsf/4a256353001af3ed4b2562bb00121564/c890aa8e65957397ca256ce10018c9d8!OpenDocument)
+
+[Example of R package: x12](https://cran.r-project.org/web/packages/x12/)
+]
+
+---
+class: inverse
+
+# Seasonal Adjustment
+
+Using _ABS 6202.0 Labour Force_ as an example:
+
+
+
+
+```r
+lab_force_df %&gt;% 
+  gather(key, val, -index) %&gt;% 
+  ggplot(aes(index, val, col = key)) +
+  geom_line()
+```
+
+![](index_files/figure-html/unnamed-chunk-20-1.png)&lt;!-- --&gt;
+
+---
+class: inverse
+
+# Seasonal Adjustment
+
+
+
+```r
+lab_force_df %&gt;% 
+  tail(100) %&gt;% 
+  gather(key, val, -index) %&gt;% 
+  ggplot(aes(index, val, col = key)) +
+  geom_line()
+```
+
+![](index_files/figure-html/unnamed-chunk-21-1.png)&lt;!-- --&gt;
+
+---
+class: inverse
+
+# Seasonal Adjustment
+Crude code to test multiple `STL` window lengths:
+
+```r
+# convert to ts
+lab_force_ts &lt;- lab_force_df %&gt;%
+  pull(total.lb.frc.original) %&gt;% 
+  ts(start = c(1978,2), frequency = 12)
+# run a few options through stl
+seasadj_compare_df &lt;- tibble(params = list(7, 9, 11, 13)) %&gt;% 
+  mutate(stl = map(params, ~ stl(lab_force_ts, s.window = .x)),
+         stl = map(stl, sw_tidy_decomp),
+         stl = map(stl, select, seasadj),
+         stl = map(stl, mutate, index = lab_force_df$index)) %&gt;% 
+  mutate(params = as.character(params)) %&gt;% 
+  unnest(stl) %&gt;% 
+  bind_rows(
+    lab_force_df %&gt;% 
+      select(index, total.lb.frc.seasadj) %&gt;%
+      rename(seasadj = total.lb.frc.seasadj) %&gt;% 
+      mutate(params = "abs")
+  ) %&gt;% 
+  spread(params, seasadj) %&gt;% 
+  tail(40) %&gt;% 
+  gather(params, seasadj, -index)
+```
+
+---
+class: inverse
+
+# Seasonal Adjustment
+
+
+```r
+ggplot(seasadj_compare_df, aes(index, seasadj, col = params)) +
+  geom_line(size = 2, alpha = 0.6)
+```
+
+![](index_files/figure-html/unnamed-chunk-23-1.png)&lt;!-- --&gt;
+    </textarea>
+<script src="https://remarkjs.com/downloads/remark-latest.min.js"></script>
+<script>var slideshow = remark.create({
+"highlightStyle": "github",
+"highlightLines": true,
+"countIncrementalSlides": false
+});
+if (window.HTMLWidgets) slideshow.on('afterShowSlide', function (slide) {
+  window.dispatchEvent(new Event('resize'));
+});
+(function() {
+  var d = document, s = d.createElement("style"), r = d.querySelector(".remark-slide-scaler");
+  if (!r) return;
+  s.type = "text/css"; s.innerHTML = "@page {size: " + r.style.width + " " + r.style.height +"; }";
+  d.head.appendChild(s);
+})();</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Config({
+  tex2jax: {
+    skipTags: ['script', 'noscript', 'style', 'textarea', 'pre']
+  }
+});
+</script>
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+(function () {
+  var script = document.createElement('script');
+  script.type = 'text/javascript';
+  script.src  = 'https://cdn.bootcss.com/mathjax/2.7.1/MathJax.js?config=TeX-MML-AM_CHTML';
+  if (location.protocol !== 'file:' && /^https?:/.test(script.src))
+    script.src  = script.src.replace(/^https?:/, '');
+  document.getElementsByTagName('head')[0].appendChild(script);
+})();
+</script>
+  </body>
+</html>
