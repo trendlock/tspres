@@ -493,6 +493,6 @@ class: inverse
 
 ```{r, fig.height=6, fig.width=11, warning=F, dpi = 200}
 ggplot(seasadj_compare_df, aes(index, seasadj, col = params)) +
-  geom_line(size = 2, alpha = 0.6)
+  geom_line()
 ```
 
